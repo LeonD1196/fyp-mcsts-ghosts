@@ -5,7 +5,6 @@ import pacman.controllers.PacmanController;
 import pacman.controllers.examples.RandomGhosts;
 import pacman.controllers.examples.StarterGhosts;
 import pacman.controllers.examples.StarterPacMan;
-import pacman.entries.oneGhost.RandomGhost;
 import pacman.game.Constants.*;
 import pacman.game.Game;
 
@@ -172,14 +171,6 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
             }
             return finalMoves;
         }
-
-//        AiNode testNode = root;
-//        int length = 0;
-//        while(testNode.children.size() != 0) {
-//            length++;
-//            testNode = getBestChild(testNode, 0);
-//        }
-//        System.out.println(length);
 
         return bestChid.actionMoves;
     }
