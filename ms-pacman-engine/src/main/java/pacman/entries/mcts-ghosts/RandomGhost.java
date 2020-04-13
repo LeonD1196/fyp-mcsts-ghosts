@@ -12,6 +12,7 @@ public class RandomGhost extends IndividualGhostController {
         super(ghost);
     }
 
+    /* Ghost returns random move based on available moves */
     @Override
     public MOVE getMove(Game game, long timeDue) {
         if (game.doesGhostRequireAction(ghost)) {
