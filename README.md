@@ -1,5 +1,7 @@
 # fyp-mcsts-ghosts
-Final Year Project
+Final Year Project that uses Monte Carlo Tree Search to control Ghosts in Ms Pac-Man  
+
+Files found in ms-pacman-engine/src/main/java/pacman/entries  
 
 Credits:  
 Ms Pacman Engine: https://github.com/solar-1992/PacManEngine  
