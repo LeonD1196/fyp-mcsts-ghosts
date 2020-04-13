@@ -11,25 +11,32 @@ import pacman.game.Game;
 import java.util.*;
 
 public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
-    private EnumMap<GHOST, MOVE> finalMoves = new EnumMap<>(GHOST.class);
+
+	/* The moves submitted to advance the state of the game */
+    private EnumMap<GHOST, MOVE> finalMoves = new EnumMap<>(GHOST.class); 
+
+    /* The moves that will be from using Monte Carlo Tree Search */
     private EnumMap<GHOST, Integer> aiGhosts = new EnumMap<>(GHOST.class);
 
+    /* Variables used to keep track of every simulations score and time */
     private static List<Integer> scores = new ArrayList<>();
     private static List<Integer> times = new ArrayList<>();
 
+    /* Minimum score and time from list of simulation scores and times */
     private static int minimumScore;
     private static int minimumTime;
 
+    /* Exploration Constant and aplha Variable */
     private static final double c = 1.0f / Math.sqrt(2.0f);
     private static final double alpha = 0.1;
 
+    /* When in Default Policy, StarterPacman() will decide the Pacman agents moves */
     public static PacmanController pacman = new StarterPacMan();
-    public static Controller<EnumMap<GHOST, MOVE>> ghosts = new StarterGhosts();
 
     /**
      * Loops through each ghost, checking if it requires a move.
      * Then checks if the ghost is edible, if so, move approximate move away from target.
-     * Else it adds it to the list of ghosts that will use MCTS to get their move.
+     * Else it adds it to the list of Ghosts that will use MCTS to get their move.
      * If neither of those cases work, continue last move made.
      *
      * @param game    A copy of the current game
@@ -82,6 +89,12 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
         return finalMoves;
     }
 
+    /* 
+     * Make Ghost follow path until next Junction is reached. 
+	 * If edible, move away from Pacman
+	 * Else if available moves contain the Ghost's last move, keeping moveing
+	 * Else move only available move left
+     */
     private MOVE followPath(Game game, GHOST ghost, MOVE direction) {
         int index = game.getGhostCurrentNodeIndex(ghost);
         MOVE lastMove = game.getGhostLastMoveMade(ghost);
@@ -104,6 +117,11 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
         return moves.get(0);
     }
 
+    /* Rule based agent to chase Pacman
+     * If Blinky requires a move, check if its edible or Pacman is close to Power Pill.
+     * If it is, move away
+     * Else chase her down
+     */
     private MOVE getBlinkyMove(Game game) {
         if (game.doesGhostRequireAction(GHOST.BLINKY)) {
             int blinkyIndex = game.getGhostCurrentNodeIndex(GHOST.BLINKY);
@@ -130,6 +148,7 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
         return null;
     }
 
+    /* checks if Pacman is close to Power Pill */
     private boolean isPacmanIsCloseToPowerPill(Game state) {
         int[] powerPillIndexes = state.getActivePowerPillsIndices();
         for (int i = 0; i < powerPillIndexes.length; i++) {
@@ -139,17 +158,24 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
         return false;
     }
 
+    /* Checks if Ghost is in Junction */
     private boolean isGhostInJunction (Game game, int index) {
         return game.isJunction(index);
     }
 
+    /* Method used to run MCTS in order to find best moves */
     public EnumMap<GHOST, MOVE> mcts (Game game, EnumMap<GHOST, Integer> aiGhosts) {
+
+    	/* Create root node based on what Ghosts requirement movement */
         AiNode root = new AiNode(null, game, aiGhosts);
         long start = new Date().getTime();
 
-        /** Runs simulations for 30ms */
+        /** Runs simulations for 30ms as other processes could take 10ms */
         while (new Date().getTime() < start + 30) {
+
+        	/* Select nodes until leaf, then expand and return new node */
             AiNode node = treePolicy (root);
+
             if (node == null) {
                 EnumMap<GHOST, MOVE> finalMoves = new EnumMap<>(GHOST.class);
                 for (GHOST ghost : aiGhosts.keySet()) {
@@ -158,11 +184,17 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
                 }
                 return finalMoves;
             }
+
+            /* After simulating for a given period, return reward */
             double reward = defaultPolicy (node);
+
+            /* Travel up visited nodes with reward and increasing number of times visited */
             backpropagate (node, reward);
         }
 
+        /* Select best node without exploration constant */
         AiNode bestChid = getBestChild (root, 0);
+
         if (bestChid == null) {
             EnumMap<GHOST, MOVE> finalMoves = new EnumMap<> (GHOST.class);
             for(GHOST ghost : aiGhosts.keySet()) {
@@ -172,9 +204,14 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
             return finalMoves;
         }
 
+        /* add mcts moves to moves going to be submitted to game */
         return bestChid.actionMoves;
     }
 
+    /* 
+     * while node is not fully expanded, select based one based on UCT 
+	 * Once a node is reached that isn't fully expanded, expand
+     */
     private AiNode treePolicy(AiNode node) {
         if (node == null)
             return null;
@@ -186,6 +223,16 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
         }
     }
 
+    /* 
+     * Run simulation until any of these things happen:
+     * - Advancement in game passes threshold
+     * - Pacman was eaten
+     * - All pills eaten
+     * - All power pills eaten
+     *
+     * 	Reward based on formula in thesis. 
+     *	Once simulation finished, return reward.
+     */
     private double defaultPolicy (AiNode node) {
         int steps = 0;
         double totalScore = 0;
@@ -218,6 +265,16 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
         return totalScore;
     }
 
+  	/* 
+ 	 * Get score and time of game and them to the to the list of scores and times achieved.
+ 	 * If Pacman was eaten, multiply score by 100.
+ 	 * Also replace minimum score and time if beaten.
+	 *
+	 * Penalty One based on how many ghosts are inside range when non-edible and outside range when edible.
+	 * Penalty Two based on the distance between ghosts being close together.
+	 *
+	 * Return reward after calculation.
+  	 */
     private static double getRewardScore(Game state, AiNode node, int pacmanLivesBefore) {
         double scoreSum = 0;
         double timeSum = 0;
@@ -264,15 +321,11 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
         return ((alpha * minimumScore * scoreSum) + ((1 - alpha) * minimumTime * timeSum)) * pacmanEatenMultiplier;
     }
 
-    private static int getAverageDistance(Game game, EnumMap<GHOST, Integer> indexes) {
-        int totalDistance = 0;
-        for(GHOST ghost : indexes.keySet()) {
-            int index = game.getGhostCurrentNodeIndex(ghost);
-            totalDistance += game.getShortestPathDistance(index, game.getPacmanCurrentNodeIndex());
-        }
-        return totalDistance / indexes.size();
-    }
-
+    /* 
+     * If only one MCTS ghost is being used, return 0.
+     * If distance between MCTS ghosts is within 15 game-units, penalty mulitplier increases.
+     * Return penalty.
+     */
     private static int getCaseTwoPenalty(Game game, EnumMap<GHOST, Integer> indexes) {
         int penaltyMultiplier = 0;
         if (indexes.keySet().size() == 1)
@@ -294,6 +347,7 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
         }
     }
 
+    /* Return best child based on UCT value */
     private AiNode getBestChild(AiNode node, double c) {
         AiNode bestChild = null;
 
@@ -308,10 +362,12 @@ public class AiGhosts extends Controller<EnumMap<GHOST, MOVE>> {
         return bestChild;
     }
 
+    /* Return UCT value */
     private double getUctValue (AiNode child, double c) {
         return (float) ((child.deltaReward / child.timesVisited) + c * Math.sqrt(2 * Math.log(child.parent.timesVisited) / child.timesVisited));
     }
 
+    /* Travel up through visited nodes, add score and the amount of times it has been visited */
     private void backpropagate (AiNode currentNode, double reward) {
         while (currentNode != null) {
             currentNode.timesVisited++;
